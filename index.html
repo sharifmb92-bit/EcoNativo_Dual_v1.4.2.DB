@@ -166,7 +166,7 @@
             font-size: 20px; cursor: pointer;
         }
 
-        /* Botón Estrella de Guardar Frase */
+        /* Botón Estrella para Aprendizaje */
         .star-save-btn {
             display: none;
             margin-top: 10px; background: rgba(255, 215, 0, 0.2);
@@ -176,9 +176,9 @@
         }
         .star-save-btn.active { display: inline-block; }
 
-        /* Modales de Notas y Aprendizaje */
+        /* Modales */
         .custom-modal {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85);
             z-index: 4000; display: flex; flex-direction: column; padding: 20px;
             color: white; opacity: 0; pointer-events: none; transition: opacity 0.3s;
         }
@@ -204,7 +204,7 @@
     <div id="splash">
         <div style="font-size: 60px; margin-bottom: 20px;">🗣️</div>
         <h2 style="letter-spacing: 4px; font-weight: 300;">ECO NATIVO DUAL 1.4.2</h2>
-        <p style="font-size: 10px; margin-top: 10px; opacity: 0.5; letter-spacing: 2px;">TRANSLATOR &amp; LEARNING ENGINE</p>
+        <p style="font-size: 10px; margin-top: 10px; opacity: 0.5; letter-spacing: 2px;">UNIVERSAL TRANSLATOR ENGINE</p>
         <button class="perm-btn" onclick="startAppDirectly()">INICIAR APLICACIÓN</button>
     </div>
 
@@ -225,7 +225,7 @@
         <button class="star-save-btn" id="save-phrase-btn" onclick="saveCurrentPhrase(event)">⭐ Guardar para aprender</button>
         
         <div class="top-tools">
-            <button class="tool-btn" id="mode-btn" title="Vista Conductor/Mostrador" onclick="toggleDisplayMode(event)">🚌</button>
+            <button class="tool-btn" id="mode-btn" title="Cambiar Vista Conductor/Mostrador" onclick="toggleDisplayMode(event)">🚌</button>
             <button class="tool-btn" title="Modo Sol" onclick="toggleContrast(event)">☀️</button>
             <button class="tool-btn" title="Mis Frases para Aprender" onclick="openStudyModal(event)">🎓</button>
             <button class="tool-btn" title="Notas del Usuario" onclick="openNotesModal(event)">📝</button>
@@ -235,14 +235,14 @@
     <!-- Modal de Notas -->
     <div class="custom-modal" id="notes-modal">
         <div class="modal-header">
-            <h3>📝 Notas del Usuario</h3>
+            <h3>📝 Notas e Historial del Usuario</h3>
             <button class="action-icon-btn" onclick="closeNotesModal()">✕</button>
         </div>
         <div class="modal-list" id="notes-container"></div>
         <button class="perm-btn" style="margin-top:0;" onclick="closeNotesModal()">Cerrar</button>
     </div>
 
-    <!-- Modal de Aprendizaje de Frases -->
+    <!-- Modal de Aprendizaje -->
     <div class="custom-modal" id="study-modal">
         <div class="modal-header">
             <h3>🎓 Frases Guardadas para Aprender</h3>
@@ -253,7 +253,7 @@
     </div>
 
     <script>
-        // medbasha - adaptive local acoustic unifier & learning database engine
+        // medbasha - adaptive local acoustic unifier & indexeddb persistence engine
         if ('serviceWorker' in navigator) { 
             navigator.serviceWorker.register('./sw.js'); 
         }
@@ -443,13 +443,13 @@
             req.onsuccess = () => {
                 const items = req.result;
                 if (items.length === 0) {
-                    container.innerHTML = '<p style="color:#aaa; text-align:center; padding:20px;">No hay notas guardadas.</p>';
+                    container.innerHTML = '<p style="color:#aaa;">No hay notas guardadas.</p>';
                 } else {
                     container.innerHTML = items.reverse().map(item => `
                         <div class="card-item">
                             <div class="card-body">
                                 <div>${item.text}</div>
-                                <div style="font-size:11px; color:#888; margin-top:4px;">${item.date}</div>
+                                <div style="font-size:10px; color:#888; margin-top:4px;">${item.date}</div>
                             </div>
                         </div>
                     `).join('');
@@ -668,25 +668,41 @@
                 const from = currentTurn === 'me' ? userLang : targetLang; 
                 const to = currentTurn === 'me' ? targetLang : userLang;
                 
-                let translated = "";
+                // Comprobación previa en el Diccionario Universal de Cortesía
                 const lowerText = cleanText.toLowerCase().trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
-
                 if (courtesyDictionary[lowerText] && courtesyDictionary[lowerText][to]) {
-                    translated = courtesyDictionary[lowerText][to];
-                } else {
-                    const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanText)}&langpair=${from}|${to}`);
-                    const data = await res.json();
-                    translated = data.responseData.translatedText;
-                    translated = protectProperNouns(translated);
-                    translated = internalEngineFilter(translated);
+                    const localTranslated = courtesyDictionary[lowerText][to];
+                    
+                    lastTranslationData = {
+                        original: cleanText,
+                        translated: localTranslated,
+                        targetLang: to
+                    };
+                    document.getElementById('save-phrase-btn').classList.add('active');
+
+                    if (currentTurn === 'me') {
+                        document.getElementById('text-client').innerText = localTranslated;
+                        speak(localTranslated, langCodes[targetLang], () => { returnToIdleState(); });
+                    } else {
+                        document.getElementById('text-me').innerText = localTranslated;
+                        speak(localTranslated, langCodes[userLang], () => { returnToIdleState(); });
+                    }
+                    return;
                 }
+
+                // Traducción a través de API
+                const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanText)}&langpair=${from}|${to}`);
+                const data = await res.json();
+                let translated = data.responseData.translatedText;
+
+                translated = protectProperNouns(translated);
+                translated = internalEngineFilter(translated);
 
                 lastTranslationData = {
                     original: cleanText,
                     translated: translated,
                     targetLang: to
                 };
-
                 document.getElementById('save-phrase-btn').classList.add('active');
 
                 if (currentTurn === 'me') {
